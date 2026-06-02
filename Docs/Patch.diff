@@ -1,0 +1,1523 @@
+diff --git a/.github/TOPICS.md b/.github/TOPICS.md
+index dc35bde9..09a29bb0 100644
+--- a/.github/TOPICS.md
++++ b/.github/TOPICS.md
+@@ -42,3 +42,150 @@
+ - internet-standard
+ 
+ ## Use these topics on GitHub via Settings → Topics
++# Web4 Protocol Stack
++
++A modular, trust-native distributed intelligence framework for building next-generation internet systems.
++
++This project explores a new architecture for the internet where context, identity, and value are first-class programmable primitives.
++
++---
++
++## 🚀 Vision
++
++Modern systems separate:
++- Data
++- Identity
++- Intelligence
++- Value
++
++Web4 merges them into a unified trust-aware network where:
++- Context is portable
++- Identity is cryptographic and persistent
++- Intelligence is distributed
++- Value is natively embedded in interaction flows
++
++---
++
++## 🧠 Core Concepts
++
++### Linked Context Tokens (LCT)
++Portable units of meaning that carry semantic state across systems and agents.
++
++### Trust Tensors
++Multi-dimensional reputation and credibility models used to evaluate agents, data, and actions.
++
++### Compression Trust
++Mechanism for validating information integrity through probabilistic and structural compression patterns.
++
++### Memory Temporal Sensor
++System for tracking evolving state across time in distributed environments.
++
++### Lightchain
++A lightweight distributed ledger optimized for context, not just transactions.
++
++---
++
++## 🏗 Architecture Layers
++
++### 1. Identity Layer
++- Decentralized identity primitives
++- Reputation binding
++- Persistent agent profiles
++
++### 2. Intelligence Layer
++- Distributed AI agents
++- Context-aware reasoning
++- Memory-linked inference systems
++
++### 3. Protocol Layer
++- MCP (Model Context Protocol)
++- ACP (Agent Coordination Protocol)
++- SAL governance rules
++- Agency delegation framework
++
++### 4. Value Layer (ATP Economy)
++- Adaptive tokenized participation
++- Reputation-weighted value flows
++- Non-linear incentive systems
++
++---
++
++## 🔗 Ecosystem Design
++
++Web4 is built on composability:
++
++- Agents communicate via structured context packets
++- Systems evolve through interaction history
++- Trust replaces static authentication
++- Reputation replaces permissioning
++
++---
++
++## 🧩 Key Modules
++
++- r6-framework → Core runtime orchestration layer
++- synchronism → Cross-agent coordination system
++- dictionary-entities → Semantic object registry
++- fractal-architecture → Recursive system scaling model
++
++---
++
++## ⚙️ Use Cases
++
++- Decentralized AI networks
++- Trust-based identity systems
++- Autonomous governance frameworks
++- Context-aware data marketplaces
++- Self-evolving distributed applications
++
++---
++
++## 📜 License
++
++AGPL-3.0 (or compatible distributed open-source model)
++
++---
++
++## 🌐 Status
++
++Experimental / early-stage protocol research system.
++
++```xlsl
++                ┌────────────────────────────┐
++                │      APPLICATION LAYER      │
++                │  AI apps · Agents · DAOs   │
++                └─────────────┬──────────────┘
++                              │
++        ┌─────────────────────┼─────────────────────┐
++        │                     │                     │
++┌───────▼────────┐  ┌────────▼────────┐  ┌────────▼────────┐
++│ INTELLIGENCE    │  │  VALUE SYSTEM   │  │  IDENTITY LAYER │
++│ LAYER           │  │  (ATP ECONOMY)  │  │                 │
++│                 │  │                 │  │ - reputation    │
++│ - distributed   │  │ - adaptive      │  │ - cryptographic │
++│   agents        │  │   incentives    │  │ - persistent    │
++│ - memory system │  │ - token flows   │  │   agents        │
++│ - inference     │  │ - trust-weighted │  │                 │
++└───────┬─────────┘  └────────┬────────┘  └────────┬────────┘
++        │                     │                     │
++        └──────────────┬──────┴──────────────┬─────┘
++                       │                     │
++              ┌────────▼────────┐  ┌───────▼─────────┐
++              │ PROTOCOL LAYER   │  │ TRUST LAYER     │
++              │                 │  │                 │
++              │ MCP / ACP / SAL │  │ - trust tensors │
++              │ delegation      │  │ - compression   │
++              │ coordination    │  │   trust         │
++              └────────┬────────┘  └────────┬────────┘
++                       │                     │
++                       └──────────┬──────────┘
++                                  │
++                        ┌─────────▼─────────┐
++                        │ CORE LEDGER       │
++                        │ "LIGHTCHAIN"      │
++                        │                   │
++                        │ - context state   │
++                        │ - event history   │
++                        │ - distributed log │
++                        └───────────────────┘
++                        
+diff --git a/Fadaka-blockchain/Verify.rs b/Fadaka-blockchain/Verify.rs
+new file mode 100644
+index 00000000..471aee70
+--- /dev/null
++++ b/Fadaka-blockchain/Verify.rs
+@@ -0,0 +1,168 @@
++//! Cross-language interop demo, Rust side.
++//!
++//! Reads a `LocalLedger` written by the Python script `mint.py` (see the
++//! `cross_language_verify/` README) and verifies:
++//!
++//! 1. The hash chain is intact end-to-end (`LocalLedger::open` replays and
++//!    verifies the chain on load — any tamper aborts).
++//! 2. The LCT minted from Python is present in the ledger.
++//! 3. An anchor proof for that LCT verifies under the Rust implementation.
++//!
++//! The point of the demo is not the LCT itself — it's that the on-disk
++//! format is the contract. Any language with a Web4 spec implementation
++//! can verify what any other language minted, with no shared runtime.
++//!
++//! Run from the `web4-core/` directory:
++//!
++//! ```sh
++//! cargo run --example cross_language_verify -- \
++//!     --ledger ./shared_ledger.jsonl \
++//!     --lct-sidecar ./shared_lct.json
++//! ```
++
++use std::env;
++use std::fs;
++use std::path::PathBuf;
++use std::process::ExitCode;
++
++use serde::Deserialize;
++use web4_core::{Ledger, LocalLedger};
++
++#[derive(Deserialize)]
++struct LctSidecar {
++    lct_id: String,
++    fingerprint: String,
++}
++
++fn parse_args() -> (PathBuf, PathBuf) {
++    let mut ledger = PathBuf::from("./shared_ledger.jsonl");
++    let mut sidecar = PathBuf::from("./shared_lct.json");
++    let mut args = env::args().skip(1);
++    while let Some(arg) = args.next() {
++        match arg.as_str() {
++            "--ledger" => {
++                ledger = args
++                    .next()
++                    .expect("--ledger requires a path argument")
++                    .into();
++            }
++            "--lct-sidecar" => {
++                sidecar = args
++                    .next()
++                    .expect("--lct-sidecar requires a path argument")
++                    .into();
++            }
++            "-h" | "--help" => {
++                eprintln!(
++                    "usage: cargo run --example cross_language_verify -- \
++                     [--ledger PATH] [--lct-sidecar PATH]"
++                );
++                std::process::exit(0);
++            }
++            other => {
++                eprintln!("unknown argument: {}", other);
++                std::process::exit(2);
++            }
++        }
++    }
++    (ledger, sidecar)
++}
++
++fn main() -> ExitCode {
++    let (ledger_path, sidecar_path) = parse_args();
++
++    println!("[rust] Reading sidecar at {}", sidecar_path.display());
++    let sidecar_text = match fs::read_to_string(&sidecar_path) {
++        Ok(s) => s,
++        Err(e) => {
++            eprintln!("[rust] Could not read sidecar {}: {}", sidecar_path.display(), e);
++            eprintln!("[rust] Did you run `python mint.py` first?");
++            return ExitCode::from(2);
++        }
++    };
++    let sidecar: LctSidecar = match serde_json::from_str(&sidecar_text) {
++        Ok(s) => s,
++        Err(e) => {
++            eprintln!("[rust] Sidecar parse error: {}", e);
++            return ExitCode::from(2);
++        }
++    };
++    println!("[rust]   lct_id      = {}", sidecar.lct_id);
++    println!("[rust]   fingerprint = {}", sidecar.fingerprint);
++
++    println!(
++        "[rust] Opening LocalLedger at {} (this replays + verifies the chain)",
++        ledger_path.display()
++    );
++    let ledger = match LocalLedger::open(&ledger_path) {
++        Ok(l) => l,
++        Err(e) => {
++            eprintln!("[rust] Ledger open failed: {}", e);
++            eprintln!("[rust] If this is a chain-integrity failure, the ledger was tampered.");
++            return ExitCode::from(3);
++        }
++    };
++    println!("[rust] Chain intact. {} entries replayed.", ledger.len());
++
++    let lct_uuid = match uuid::Uuid::parse_str(&sidecar.lct_id) {
++        Ok(u) => u,
++        Err(e) => {
++            eprintln!("[rust] Sidecar lct_id is not a UUID: {}", e);
++            return ExitCode::from(2);
++        }
++    };
++
++    let lookup = match ledger.lookup(lct_uuid) {
++        Ok(l) => l,
++        Err(e) => {
++            eprintln!("[rust] Ledger lookup failed: {}", e);
++            return ExitCode::from(3);
++        }
++    };
++    let lct = match lookup {
++        Some(lct) => lct,
++        None => {
++            eprintln!("[rust] LCT {} not present in ledger.", sidecar.lct_id);
++            return ExitCode::from(3);
++        }
++    };
++    println!("[rust] LCT present in ledger.");
++
++    if lct.fingerprint() != sidecar.fingerprint {
++        eprintln!(
++            "[rust] FINGERPRINT MISMATCH:\n  sidecar:  {}\n  on-chain: {}",
++            sidecar.fingerprint,
++            lct.fingerprint()
++        );
++        return ExitCode::from(3);
++    }
++    println!("[rust] Fingerprint matches sidecar.");
++
++    let proof = match ledger.anchor(lct.id) {
++        Ok(p) => p,
++        Err(e) => {
++            eprintln!("[rust] anchor() failed: {}", e);
++            return ExitCode::from(3);
++        }
++    };
++    let verified = match ledger.verify_proof(&proof) {
++        Ok(v) => v,
++        Err(e) => {
++            eprintln!("[rust] verify_proof error: {}", e);
++            return ExitCode::from(3);
++        }
++    };
++    if !verified {
++        eprintln!("[rust] Anchor proof DID NOT verify under the Rust implementation.");
++        return ExitCode::from(3);
++    }
++    println!("[rust] Anchor proof verifies under the Rust implementation. ✓");
++    println!();
++    println!("[rust] Cross-language verification succeeded.");
++    println!(
++        "[rust] Python wrote a hash-chained ledger; Rust read the same file, replayed the chain, \
++         looked up the LCT by id, matched its fingerprint, and verified the inclusion proof — \
++         with zero shared runtime. The on-disk format is the contract."
++    );
++    ExitCode::SUCCESS
++}
+diff --git a/README.md b/README.md
+index 3583d5dd..e6843a0d 100644
+--- a/README.md
++++ b/README.md
+@@ -444,7 +444,7 @@ python attack_track_fc.py                  # Economic attacks
+ 
+ ## 📊 Repository Structure
+ 
+-```
++```xlsl
+ web4/
+ ├── web4-core/                         # Reference Rust + Python SDK, AttestationEnvelope
+ ├── web4-trust-core/                   # Trust tensor implementations (Rust)
+diff --git a/bash.sh b/bash.sh
+new file mode 100644
+index 00000000..4cc68d14
+--- /dev/null
++++ b/bash.sh
+@@ -0,0 +1,22 @@
++pip install maturin
++cd python
++maturin develop
++cd simulations
++
++# Attack simulations
++python attack_simulations.py               # Core attack simulation framework
++python attack_track_fb.py                  # Trust manipulation attacks
++python attack_track_fc.py                  # Economic attacks
++
++# For full 4-Life game demos, see: https://github.com/dp-web4/4-life
++# Terminal 1: Start the demo store
++cd demo/store
++pip install -r requirements.txt
++python app.py
++# Visit: http://localhost:8000
++
++# Terminal 2: Start the delegation UI
++cd demo/delegation-ui
++pip install -r requirements.txt
++python app.py
++# Visit: http://localhost:8001
+diff --git a/docs/README.md b/docs/README.md
+deleted file mode 100644
+index f58fb752..00000000
+--- a/docs/README.md
++++ /dev/null
+@@ -1,41 +0,0 @@
+-# Web4 Documentation
+-
+-Documentation organized by purpose and audience.
+-
+-## Structure
+-
+-| Directory | Purpose | Audience |
+-|-----------|---------|----------|
+-| [`why/`](why/) | Motivation, philosophy, conceptual foundations | Curious newcomers, strategists |
+-| [`what/`](what/) | Specifications, definitions, standards | Implementers, auditors |
+-| [`how/`](how/) | Implementation guides, integration patterns | Developers, operators |
+-| [`history/`](history/) | Research, decisions, evolution | Researchers, historians |
+-| [`reference/`](reference/) | Quick lookups, glossaries, indexes | Everyone |
+-
+-## Quick Start by Role
+-
+-**New to Web4?**
+-1. Start with [`why/EXECUTIVE_SUMMARY.md`](why/EXECUTIVE_SUMMARY.md)
+-2. Browse [`reference/GLOSSARY.md`](reference/GLOSSARY.md) for terminology
+-3. Read [`why/STRATEGIC_DIRECTION.md`](why/STRATEGIC_DIRECTION.md) for vision
+-
+-**Implementing Web4?**
+-1. Review [`what/specifications/`](what/specifications/) for formal specs
+-2. Follow [`how/guides/`](how/guides/) for implementation patterns
+-3. Check [`reference/IMPLEMENTATION_STATUS.md`](reference/IMPLEMENTATION_STATUS.md) for current state
+-
+-**Integrating with SAGE/ACT?**
+-1. See [`how/integration/`](how/integration/) for cross-system patterns
+-2. Check [`reference/ACT_QUICK_REFERENCE.md`](reference/ACT_QUICK_REFERENCE.md) for ACT details
+-
+-**Security review?**
+-1. Start with [`reference/security/THREAT_MODEL.md`](reference/security/THREAT_MODEL.md)
+-2. Review [`history/audits/`](history/audits/) for past assessments
+-
+-## Whitepaper
+-
+-The full technical whitepaper is in [`whitepaper-web/`](whitepaper-web/) with web navigation.
+-
+----
+-
+-*Reorganized February 2026 following the why/what/how/history pattern.*
+diff --git a/docs/README.mdx b/docs/README.mdx
+new file mode 100644
+index 00000000..9d3cab8a
+--- /dev/null
++++ b/docs/README.mdx
+@@ -0,0 +1,166 @@
++# Web4 Documentation
++
++Documentation organized by purpose and audience.
++
++## Structure
++
++| Directory | Purpose | Audience |
++|-----------|---------|----------|
++| [`why/`](why/) | Motivation, philosophy, conceptual foundations | Curious newcomers, strategists |
++| [`what/`](what/) | Specifications, definitions, standards | Implementers, auditors |
++| [`how/`](how/) | Implementation guides, integration patterns | Developers, operators |
++| [`history/`](history/) | Research, decisions, evolution | Researchers, historians |
++| [`reference/`](reference/) | Quick lookups, glossaries, indexes | Everyone |
++
++## Quick Start by Role
++
++**New to Web4?**
++1. Start with [`why/EXECUTIVE_SUMMARY.md`](why/EXECUTIVE_SUMMARY.md)
++2. Browse [`reference/GLOSSARY.md`](reference/GLOSSARY.md) for terminology
++3. Read [`why/STRATEGIC_DIRECTION.md`](why/STRATEGIC_DIRECTION.md) for vision
++
++**Implementing Web4?**
++1. Review [`what/specifications/`](what/specifications/) for formal specs
++2. Follow [`how/guides/`](how/guides/) for implementation patterns
++3. Check [`reference/IMPLEMENTATION_STATUS.md`](reference/IMPLEMENTATION_STATUS.md) for current state
++
++**Integrating with SAGE/ACT?**
++1. See [`how/integration/`](how/integration/) for cross-system patterns
++2. Check [`reference/ACT_QUICK_REFERENCE.md`](reference/ACT_QUICK_REFERENCE.md) for ACT details
++
++**Security review?**
++1. Start with [`reference/security/THREAT_MODEL.md`](reference/security/THREAT_MODEL.md)
++2. Review [`history/audits/`](history/audits/) for past assessments
++
++## Whitepaper
++
++The full technical whitepaper is in [`paper-web/`](whitepaper-web/) with web navigation.
++
++---
++
++*Reorganized February 2026 following the why/what/how/history pattern.*
++
++# web4-core
++
++[![License: AGPL-3.0-or-later](https://img.shields.io/badge/License-AGPL--3.0--or--later-blue.svg)](LICENSE)
++
++Foundational primitives for the Web4 trust-native ontology, implemented in Rust with optional Python bindings via PyO3.
++
++> **AI is already taking actions in the world. We can't prove what it did.**
++> Web4 is the open standard that closes that gap.
++
++This crate provides the cryptographic and semantic primitives — Linked Context Tokens, Trust/Value tensors, identity coherence, and Ed25519-bound presence — that compose into the larger Web4 standard.
++
++## What's in here
++
++- **LCT (Linked Context Token)** — Non-transferable presence tokens with hardware-bindable cryptographic identity. Parent/child lineage, status (Active/Dormant/Void/Slashed), 5-level hardware-binding ladder.
++- **T3 (Trust Tensor)** — 3 root dimensions (Talent / Training / Temperament). Each root is itself an open-ended RDF sub-graph of context-specific sub-dimensions via `web4:subDimensionOf`. Fractally extensible, not a fixed-size vector.
++- **V3 (Value Tensor)** — 3 root dimensions (Valuation / Veracity / Validity). Same fractal RDF pattern as T3.
++- **Coherence** — Identity coherence scoring `C × S × Φ × R` (Continuity × Stability × Phi × Reachability). Multiplicative — a low score in any factor limits the whole.
++- **Crypto** — Ed25519 signing/verification, SHA-256 hashing.
++
++## Quick start
++
++LCTs are inherently blockchain tokens. The canonical creation path **mints
++them into a ledger** — `Lct::new()` alone leaves the LCT unanchored, which is
++fine for tests and prototyping but not for any deployment where presence
++needs to be verifiable.
++
++```rust
++use web4_core::{Lct, EntityType, T3, TrustDimension, Coherence, InMemoryLedger, Ledger};
++
++// 1. Create an LCT (in-memory primitive)
++let (lct, keypair) = Lct::new(EntityType::Human, None);
++
++// 2. Anchor to a ledger
++let mut ledger = InMemoryLedger::new();
++let receipt = lct.mint(&mut ledger).unwrap();
++println!("Minted at index {}, hash {}", receipt.entry_index, receipt.entry_hash);
++
++// 3. Sign and verify
++let message = b"Hello, Web4!";
++let signature = keypair.sign(message);
++assert!(lct.verify_signature(message, &signature).is_ok());
++
++// 4. Generate proof of existence
++let proof = ledger.anchor(lct.id).unwrap();
++assert!(ledger.verify_proof(&proof).unwrap());
++
++// 5. Build a trust tensor by observation
++let mut trust = T3::new();
++trust.observe(TrustDimension::Talent, 0.9).unwrap();
++trust.observe(TrustDimension::Training, 0.85).unwrap();
++let score = trust.aggregate();
++
++// 6. Identity coherence
++let coherence = Coherence::with_values(0.92, 0.92, 0.92, 0.92).unwrap();
++assert!(coherence.meets_threshold(lct.coherence_threshold()));
++```
++
++For persistence, swap `InMemoryLedger` for `LocalLedger`:
++
++```rust
++use web4_core::{Lct, EntityType, LocalLedger, Ledger};
++
++let mut ledger = LocalLedger::open("./team-ledger.jsonl").unwrap();
++let (lct, _kp) = Lct::new(EntityType::AiSoftware, None);
++let receipt = lct.mint(&mut ledger).unwrap();
++
++// Reopen later — state is replayed from the file with chain-integrity checks
++let ledger = LocalLedger::open("./team-ledger.jsonl").unwrap();
++assert_eq!(ledger.lookup(lct.id).unwrap().map(|l| l.id), Some(lct.id));
++```
++
++## Ledger backends
++
++| Backend | Use case | Persistence | Distribution |
++|---|---|---|---|
++| `InMemoryLedger` | Tests, prototyping, ephemeral runs | None | Single process |
++| `LocalLedger` | Solo dev, team-scoped accountability, regulated/air-gapped | File (JSON-lines, hash-chained) | Single host |
++| `ActLedger` *(separate crate, future)* | Federation-wide consensus | ACT Cosmos chain | Distributed |
++
++All backends implement the [`Ledger`] trait — the canonical surface is stable across them. Swap backends without changing your minting code.
++
++## Web4 ontology context
++
++```
++Web4 = MCP + RDF + LCT + T3/V3*MRH + ATP/ADP
++```
++
++`web4-core` implements the **LCT + T3/V3 + Coherence** primitives. The remaining Web4 components (MCP integration, MRH context scoping, ATP/ADP energy economics, RDF ontology) live in [`web4-standard/`](https://github.com/dp-web4/web4/tree/main/web4-standard) and the broader Web4 SDK.
++
++## Python bindings
++
++Available via [maturin](https://github.com/PyO3/maturin) at [`web4-core/python/`](python/). Install:
++
++```bash
++pip install web4-core
++```
++
++Or build from source:
++
++```bash
++pip install maturin
++cd python
++maturin develop
++```
++
++Python API mirrors the Rust API — see [`python/README.md`](python/README.md).
++
++## Architecture
++
++See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the rationale on why Web4 is implemented in Rust with Python bindings, and how this crate fits into the larger ecosystem.
++
++## Status
++
++Working ontology with growing proof points. Demonstrated 0% → 94.85% on ARC-AGI-3 (same Claude Opus 4.6, structured around Web4 patterns via the SAGE harness). Public scorecard: <https://arcprize.org/scorecards/c7dfb4f1-8642-4c9e-ab4d-152f5f8e33b4>.
++
++R&D — not production. See parent repo [STATUS.md](https://github.com/dp-web4/web4/blob/main/STATUS.md) for honest assessment.
++
++## Patent notice
++
++This software implements technology covered by US Patents 11,477,027 and 12,278,913, and pending application 19/178,619 (assigned to MetaLINXX Inc.). A royalty-free patent license is granted under AGPL-3.0 terms for non-commercial / research / open-source use. For commercial licensing, contact dp@metalinxx.io. See [PATENTS.md](PATENTS.md) for full terms.
++
++## License
++
++AGPL-3.0-or-later. See [LICENSE](LICENSE).
+diff --git a/docs/START_HERE.md b/docs/START_HERE.md
+index 55b630ad..43169942 100644
+--- a/docs/START_HERE.md
++++ b/docs/START_HERE.md
+@@ -8,7 +8,7 @@ Web4 is research into **trust-native distributed intelligence**. Instead of plat
+ 
+ ---
+ 
+-## What Makes Web4 Different
++## What Makes Web4 Different 
+ 
+ | Web2 | Web3 | Web4 |
+ |------|------|------|
+diff --git a/docs/Status.mdx b/docs/Status.mdx
+new file mode 100644
+index 00000000..b1dd7a51
+--- /dev/null
++++ b/docs/Status.mdx
+@@ -0,0 +1,103 @@
++# Web4 Implementation Status
++
++**Last Updated**: May 13, 2026
++
++---
++
++## Headline
++
++Web4 is a **working ontology** with **real proof points** and **real gaps**. R&D, not production. The spec corpus is stable; reference implementations exist; some demonstrations have moved from inferred to measured. **As of 2026-04-28, the core primitives are publicly installable.**
++
++**The architectural shape is now explicitly specified.** Three core-spec updates (2026-05-13 + 2026-05-14) make the previously-inferable structural properties normative:
++- [`inter-society-protocol.md`](web4-standard/core-spec/inter-society-protocol.md) — society genesis (self-bootstrapped + federation-based), first-contact protocol (three sovereign options), ATP as unit-of-account with society-sovereign reification, secession/dissolution
++- [`society-roles.md`](web4-standard/core-spec/society-roles.md) — seven base-mandatory roles (Sovereign, Law Oracle, Policy-Entity, Treasurer, Administrator, Archivist, Citizen) + context-mandatory (forced by outward role) + optional, with fractal composability semantics
++- [`mcp-protocol.md`](web4-standard/core-spec/mcp-protocol.md) — **v0.1.3 amendment (2026-05-14)** adds explicit cross-society binding (§1.1, §7.3 R7, §7.4 cross-society LCT envelope, §7.5 witnessing + Reputation propagation). **Cross-society R6/R7 action protocol is now spec'd** — and the spec recognizes that MCP IS the inter-society interface per the canonical equation, not a missing layer. Three previously-deferred inter-society gaps (cross-society actions, society-society trust tensors, exchange-rate negotiation transport) are resolved by this amendment.
++
++The Web4 anti-hierarchical-by-design property is now stated normatively in spec rather than inferred from the ontology.
++
++The strongest single proof point: **the same Claude Opus 4.6 you can use today scores 0% on ARC-AGI-3 by default and 94.85% with a Web4-shaped harness around it**. The model didn't change. The structure around the model did.
++
++Public scorecard: https://arcprize.org/scorecards/c7dfb4f1-8642-4c9e-ab4d-152f5f8e33b4
++
++The strongest single external validation: a 2026-05-13 three-round Kimi 2.6 cross-model review scored architectural coherence 8.5/10 and bootstrap-story 8/10, while sharpening the unit-of-account framing for ATP and surfacing the inter-society protocol gap that the two new specs now address. Verbatim transcript: [`forum/kimi2_6_review.md`](forum/kimi2_6_review.md).
++
++---
++
++## Published artifacts (current: v0.1.1, 2026-04-28)
++
++| Package | Registry | Version | Install |
++|---|---|---|---|
++| **web4-core** (Rust) | [crates.io](https://crates.io/crates/web4-core) | 0.1.1 | `cargo add web4-core` |
++| **web4-core** (Python) | [PyPI](https://pypi.org/project/web4-core/) | 0.1.1 | `pip install web4-core` |
++| **web4-trust-core** (Rust) | [crates.io](https://crates.io/crates/web4-trust-core) | 0.1.1 | `cargo add web4-trust-core` |
++| **web4-trust** (Python) | [PyPI](https://pypi.org/project/web4-trust/) | 0.1.1 | `pip install web4-trust` |
++
++> v0.1.0 yanked from crates.io: the Python `web4-core` wheel shipped without `__init__.py`, so `import web4_core` returned an empty module. Fixed in v0.1.1; v0.1.0 PyPI artifacts remain installable but `web4-trust`'s docstring also incorrectly described tensors as "6-dimensional" (canonical: 3 root dims, fractally extensible via `web4:subDimensionOf`). Use v0.1.1.
++
++All AGPL-3.0-or-later. Patent grant terms: [PATENTS.md](PATENTS.md). Commercial licensing: dp@metalinxx.io.
++
++`web4-core` provides LCT (Linked Context Token) primitives + T3/V3 trust tensors + identity coherence + ledger anchoring (`InMemoryLedger`, `LocalLedger`). `web4-trust-core` adds trust persistence and witnessing primitives. The Python wheels are PyO3-built bindings over the same Rust core.
++
++---
++
++## What's working
++
++| Layer | Status | Where |
++|---|---|---|
++| **Spec corpus** (LCT, T3/V3, MRH, ATP/ADP, R6/R7) | Stable | [`web4-standard/core-spec/`](web4-standard/core-spec/) |
++| **Inter-society protocol spec** (genesis, first-contact, federation, secession) | v0.1.2 DRAFT, 2026-05-13 | [`web4-standard/core-spec/inter-society-protocol.md`](web4-standard/core-spec/inter-society-protocol.md) |
++| **Society roles spec** (7 base-mandatory + context-mandatory + optional) | v0.1.0 DRAFT, 2026-05-13 | [`web4-standard/core-spec/society-roles.md`](web4-standard/core-spec/society-roles.md) |
++| **`web4-core`** | **Published v0.1.1** (crates.io + PyPI). LCT, T3/V3, Coherence, Ledger trait + 2 backends (InMemory, Local file). 52 unit tests + 4 doctests. | [`web4-core/`](web4-core/) |
++| **`web4-trust-core`** | **Published v0.1.1** (crates.io + PyPI). Trust storage, witnessing, decay. | [`web4-trust-core/`](web4-trust-core/) |
++| **Runnable proof of presence** | `python identity_bootstrap.py` — bootstraps a host LCT (keypair on disk, hash-chained `LocalLedger`, public `lct.json` sidecar); `--verify` re-checks the chain on re-run. ~30 sec. | [`web4-core/python/examples/identity_bootstrap.py`](web4-core/python/examples/identity_bootstrap.py) |
++| **Cross-language interop demo** | Python mints an LCT to a hash-chained ledger; a Rust binary reads the same `ledger.jsonl` and verifies chain integrity + anchor proof. The on-disk format is the contract. | [`web4-core/examples/cross_language_verify/`](web4-core/examples/cross_language_verify/) |
++| **Reference Python SDK** | 2,627 tests, mypy --strict clean (not yet on PyPI separately) | [`web4-standard/implementation/`](web4-standard/implementation/) |
++| **Cognition harness producing 94.85%** | Open source | [SAGE](https://github.com/dp-web4/SAGE) |
++| **Attack simulation suite** | 424 vectors / 84 tracks, ~85% detection rate against **synthetic** adversaries. No red team engagement yet; some "defenses" are standard infosec practices (TEMPEST, Faraday) documented for completeness rather than as Web4-novel mechanisms. See [`simulations/README.md`](simulations/README.md) for honest breakdown. | [`simulations/`](simulations/) |
++| **Threat model** | v2.0 | [`docs/reference/security/THREAT_MODEL.md`](docs/reference/security/THREAT_MODEL.md) |
++| **Authorization layer** | PostgreSQL schemas + security mitigations | [`web4-standard/implementation/authorization/`](web4-standard/implementation/authorization/) |
++| **Coordination framework** (Phase 2a–2d) | Validated | [`web4-standard/implementation/reference/`](web4-standard/implementation/reference/) |
++
++---
++
++## What's missing (this public repo)
++
++| Gap | Where it stands | Where production lives |
++|---|---|---|
++| Hardware binding reference (TPM 2.0 on real devices) | Python `AttestationEnvelope` shipped; Rust port and on-device integration in progress | **Hardbound** (enterprise, contact dp@metalinxx.io) |
++| Economic attack modeling at scale | Empirical defenses only; no real-market testing | Open research |
++| Formal Sybil-resistance proofs | Empirical defenses only | Open research |
++| Production deployment | All testing is synthetic | Hardbound for regulated environments |
++
++---
++
++## Where it landed publicly
++
++- **AI Demo Day 4** (2026-04-26): Web4 presented as "verifiable presence" for agentic AI. See [`docs/why/DEMO_DAY_2026-04.md`](docs/why/DEMO_DAY_2026-04.md). Slides + narration archived at https://4-gov.org/demo.
++- **Public scorecard**: https://arcprize.org/scorecards/c7dfb4f1-8642-4c9e-ab4d-152f5f8e33b4 (verifiable from any browser).
++
++---
++
++## Open questions
++
++These are not gaps to fix; they are research questions:
++
++- Are stake amounts actually deterrent? (no economic modeling at scale)
++- Does witness diversity resist sophisticated cartels?
++- What's the minimal viable Web4 for a public pilot?
++- How does the harness-effect (the 94.85% delta) generalize across reasoning tasks beyond ARC-AGI-3?
++- How does the same harness perform with smaller models?
++
++---
++
++## Pointers for deeper reading
++
++- **Public framing**: [`docs/why/DEMO_DAY_2026-04.md`](docs/why/DEMO_DAY_2026-04.md)
++- **The proof point in detail**: [`docs/proof/ARC-AGI-3.md`](docs/proof/ARC-AGI-3.md)
++- **Ecosystem map**: [`docs/reference/RELATED_REPOS.md`](docs/reference/RELATED_REPOS.md)
++- **Conceptual foundation**: [`whitepaper/`](whitepaper/)
++- **Full historical status (Q4 2025 – Q1 2026)**: [`docs/history/STATUS-2026-02.md`](docs/history/STATUS-2026-02.md)
++
++---
++
++*This is the living STATUS.md, kept short and current. Long-form historical detail lives in `docs/history/`.*
+diff --git a/docs/reference/security/CRYPTO_ANALYSIS.md b/docs/reference/security/CRYPTO_ANALYSIS.md
+new file mode 100644
+index 00000000..a9dcac8e
+--- /dev/null
++++ b/docs/reference/security/CRYPTO_ANALYSIS.md
+@@ -0,0 +1,287 @@
++# 🔐 CRYPTO_ANALYSIS.md
++## Web4 Security Reference — Edge Crypto Analysis Layer
++
++---
++
++# 1. Overview
++
++The Edge Crypto Layer secures all data flowing through the Web4 runtime system:
++
++- UI execution layer
++- Plugins and modules
++- State kernel
++- HMR updates
++- Remote module loading
++- Network communication
++
++It enforces **zero-trust cryptographic execution at every layer**.
++
++---
++
++# 2. Threat Model
++
++The system assumes all external inputs are hostile.
++
++## Covered threats:
++
++- Malicious plugin execution
++- SSRF attacks via runtime fetch
++- Prompt injection via remote modules
++- State leakage via logs or UI
++- Hot Module Replacement (HMR) injection
++- Path traversal in filesystem routing
++
++---
++
++# 3. Cryptographic Core
++
++## 3.1 Algorithms
++
++- AEAD Encryption: AES-256-GCM / ChaCha20-Poly1305  
++- Key Exchange: X25519 (ECDH)  
++- Signatures: Ed25519  
++- KDF: HKDF-SHA256 / Argon2  
++
++---
++
++## 3.2 Secure Randomness
++
++All cryptographic operations MUST use OS-level entropy:
++
++- `crypto.getRandomValues()`
++- No deterministic fallback allowed
++
++---
++
++# 4. Data Protection Layers
++
++## Layer 1 — Transport Security
++
++- TLS 1.2+ required
++- Certificate validation enforced
++- No insecure overrides allowed in production
++
++---
++
++## Layer 2 — Payload Encryption
++
++All sensitive payloads are encrypted before transmission:
++Rules:
++- Unique nonce per message
++- Never reuse key/nonce pairs
++- Always verify authentication tag
++
++---
++
++## Layer 3 — State Encryption
++
++Client state is encrypted before storage:
++Keys:
++- Derived per-session via HKDF
++- Never exposed to plugins
++
++---
++
++## Layer 4 — Plugin Isolation
++
++Plugins operate under strict trust boundaries:
++
++### Trusted plugins:
++- read/write state
++- UI rendering
++- internal APIs
++
++### Untrusted plugins:
++- read-only state
++- no network access
++- sandboxed execution only
++
++---
++
++# 5. SSRF Protection
++
++## Blocked IP ranges:
++
++- 127.0.0.0/8
++- 169.254.0.0/16
++- 10.0.0.0/8
++- 172.16.0.0/12
++- 192.168.0.0/16
++
++## Rules:
++
++- DNS resolution before request execution
++- IP validation before network call
++- Only allowlisted domains for plugins
++
++---
++
++# 6. HMR Security Model
++
++Hot Module Reload is treated as a high-risk vector.
++
++## Secure flow:
++Rules:
++- Unique nonce per message
++- Never reuse key/nonce pairs
++- Always verify authentication tag
++
++---
++
++## Layer 3 — State Encryption
++
++Client state is encrypted before storage:
++
++Keys:
++- Derived per-session via HKDF
++- Never exposed to plugins
++
++---
++
++## Layer 4 — Plugin Isolation
++
++Plugins operate under strict trust boundaries:
++
++### Trusted plugins:
++- read/write state
++- UI rendering
++- internal APIs
++
++### Untrusted plugins:
++- read-only state
++- no network access
++- sandboxed execution only
++
++---
++
++# 5. SSRF Protection
++
++## Blocked IP ranges:
++
++- 127.0.0.0/8
++- 169.254.0.0/16
++- 10.0.0.0/8
++- 172.16.0.0/12
++- 192.168.0.0/16
++
++## Rules:
++
++- DNS resolution before request execution
++- IP validation before network call
++- Only allowlisted domains for plugins
++
++---
++
++# 6. HMR Security Model
++
++Hot Module Reload is treated as a high-risk vector.
++
++## Secure flow:
++
++## Requirements:
++
++- Signed update payloads
++- Version hash validation
++- Rollback support
++
++## Failure response:
++
++- Reject patch
++- Restore previous state
++- Log security event
++
++---
++
++# 7. Key Management
++
++## Key Types:
++
++- session_key → runtime encryption
++- state_key → persistent storage encryption
++- plugin_key → module verification
++
++## Rules:
++
++- Never store keys in plaintext
++- Rotate per session or TTL window
++- Private keys never exposed to plugins
++
++---
++
++# 8. Signature Verification
++
++All external modules MUST be verified:
++
++If verification fails:
++- Block execution
++- Discard module
++- Log security event
++
++---
++
++# 9. Secure Execution Sandbox
++
++All dynamic code runs inside a sandbox:
++
++## Restrictions:
++
++- No direct DOM access
++- No unrestricted network access
++- No filesystem access
++- No crypto key access
++
++## Allowed API surface:
++
++- state
++- navigate
++- emitEvent
++- secureFetch
++- readOnlyStorage
++
++---
++
++# 10. Logging & Redaction
++
++Security logging system:
++
++- Secrets automatically redacted
++- Keys hashed before logging
++- Sensitive stack traces sanitized
++
++---
++
++# 11. Forward Security Model
++
++- Compromised session keys cannot decrypt past sessions
++- Keys rotate per runtime lifecycle
++- Plugins cannot persist cryptographic access
++
++---
++
++# 12. Production Hardening
++
++Recommended safeguards:
++
++- Enable signed HMR only
++- Enforce strict CSP headers
++- Disable unsigned remote modules
++- Use hardware-backed key storage where available
++
++---
++
++# 13. Core Principle
++
++> Everything is untrusted until cryptographically verified.
++
++---
++
++# 14. Summary
++
++This system ensures:
++
++- 🔐 Everything is encrypted
++- 🧾 Everything is signed
++- 🧪 Everything is sandboxed
++- 🌐 Everything remote is hostile by default
++
++---
+diff --git a/docs/reference/security/web4-protocol.md b/docs/reference/security/web4-protocol.md
+new file mode 100644
+index 00000000..1f450dc0
+--- /dev/null
++++ b/docs/reference/security/web4-protocol.md
+@@ -0,0 +1,232 @@
++# Threat Model — Web4 Protocol Stack
++
++## Overview
++
++This document defines the threat model for the Web4 Protocol Stack, including identity, intelligence, trust, and value layers.
++
++The system assumes a hostile internet environment where:
++- Agents may be malicious or compromised
++- Context data may be forged or replayed
++- Identity claims may be spoofed
++- Reputation systems may be manipulated
++- Protocol nodes may be partially untrusted
++
++Security is not a perimeter. It is a continuous validation process across all layers.
++
++---
++
++## Security Objectives
++
++The system must ensure:
++
++### 1. Integrity
++All context, identity, and ledger state must be tamper-evident.
++
++### 2. Authenticity
++All agents and messages must be cryptographically verifiable.
++
++### 3. Trust Resistance
++Reputation and trust scores must resist sybil and collusion attacks.
++
++### 4. Context Consistency
++Linked Context Tokens (LCTs) must not be replayed, forked, or silently modified.
++
++### 5. Fault Tolerance
++System must degrade gracefully under partial compromise.
++
++---
++
++## Assets
++
++### High-Value Assets
++
++- Linked Context Tokens (LCT)
++- Trust Tensors (reputation state)
++- Identity Records (decentralized IDs)
++- Lightchain ledger state
++- Agent memory stores
++- Protocol coordination messages (MCP / ACP)
++
++---
++
++## Threat Actors
++
++### 1. External Adversaries
++- Attempt to inject malicious context
++- Replay or forge LCTs
++- Attack identity resolution systems
++
++### 2. Malicious Agents
++- Sybil identity generation
++- Reputation farming / manipulation
++- Protocol misuse (ACP/MCP exploitation)
++
++### 3. Compromised Nodes
++- Altered ledger synchronization
++- Memory poisoning
++- Trust tensor corruption
++
++### 4. Collusive Networks
++- Coordinated reputation inflation
++- Fake consensus formation
++- Distributed misinformation injection
++
++---
++
++## Attack Surfaces
++
++### 1. Identity Layer
++**Risks:**
++- Sybil attacks
++- Key leakage
++- Identity spoofing
++
++**Mitigations:**
++- Cryptographic identity binding
++- Reputation-weighted identity trust
++- Rate-limited identity creation
++- Optional hardware-backed keys
++
++---
++
++### 2. Intelligence Layer
++**Risks:**
++- Memory poisoning
++- Prompt injection via context packets
++- Adversarial agent behavior
++
++**Mitigations:**
++- Context sanitization pipelines
++- Signed memory writes
++- Trust-weighted inference inputs
++- Agent isolation sandboxing
++
++---
++
++### 3. Protocol Layer (MCP / ACP / SAL)
++**Risks:**
++- Malformed coordination messages
++- Delegation abuse
++- Governance manipulation
++
++**Mitigations:**
++- Strict schema validation
++- Permissioned delegation graphs
++- Multi-agent consensus for critical actions
++- Protocol version pinning
++
++---
++
++### 4. Trust System (Trust Tensors)
++**Risks:**
++- Reputation gaming
++- Collusive scoring
++- Feedback loops amplifying bias
++
++**Mitigations:**
++- Multi-dimensional scoring (no single metric dominance)
++- Decay functions over time
++- Anomaly detection in trust graphs
++- Cross-validation across independent sources
++
++---
++
++### 5. Lightchain Ledger
++**Risks:**
++- Forking attacks
++- State replay
++- Transaction ordering manipulation
++
++**Mitigations:**
++- Hash-linked context blocks
++- Probabilistic finality
++- Multi-node validation quorum
++- Replay protection via temporal sensors
++
++---
++
++## Systemic Threats
++
++### 1. Sybil Domination
++Attackers generate large numbers of fake agents to dominate trust or governance systems.
++
++**Defense Strategy:**
++- Cost of identity creation increases with network scale
++- Trust-weighted participation thresholds
++- Behavioral fingerprinting across agents
++
++---
++
++### 2. Context Poisoning
++Malicious injection of misleading or structured false context into LCT flows.
++
++**Defense Strategy:**
++- Context signatures
++- Trust filtering before ingestion
++- Cross-agent validation loops
++
++---
++
++### 3. Feedback Loop Collapse
++Reputation systems reinforcing their own bias until instability occurs.
++
++**Defense Strategy:**
++- Time-decayed trust tensors
++- Randomized audit sampling
++- External validator injection points
++
++---
++
++### 4. Coordination Hijacking
++Manipulation of MCP/ACP flows to redirect system behavior.
++
++**Defense Strategy:**
++- Multi-party approval for critical actions
++- Delegation transparency logs
++- Protocol-level rate limiting
++
++---
++
++## Trust Assumptions
++
++The system assumes:
++
++- No single node is fully trusted
++- No agent is permanently trusted
++- All trust is probabilistic and time-decayed
++- All state is subject to validation
++- All coordination can be audited
++
++---
++
++## Security Posture
++
++The Web4 stack is designed as:
++
++> “Trust emerges from structure, not authority.”
++
++Security is achieved through:
++- Redundancy
++- Verification layers
++- Behavioral consistency checks
++- Distributed validation
++
++Not through central control.
++
++---
++
++## Open Risks (Research Areas)
++
++- Formal verification of Trust Tensors
++- Resistance modeling against adaptive adversaries
++- Game theory stability of ATP economy
++- Memory poisoning detection in distributed AI agents
++- Long-term entropy in reputation systems
++
++---
++
++## Conclusion
++
++The Web4 protocol assumes adversarial conditions as the default state of the network.
++
++Security is not a feature—it is the architecture itself.
+diff --git a/game/engine/federation_crypto.py b/game/engine/federation_crypto.py
+new file mode 100644
+index 00000000..a49a64c4
+--- /dev/null
++++ b/game/engine/federation_crypto.py
+@@ -0,0 +1,11 @@
++# federation_crypto.py
++try:
++    from nacl.signing import SigningKey
++    BACKEND = "pynacl"
++except ImportError:
++    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
++    BACKEND = "cryptography"
++
++class FederationKeyPair:
++    # Unified implementation with backend branching
++    ...
+diff --git a/game/engine/lct_identity.py b/game/engine/lct_identity.py
+new file mode 100644
+index 00000000..8c2f668e
+--- /dev/null
++++ b/game/engine/lct_identity.py
+@@ -0,0 +1,18 @@
++# lct_identity.py
++try:
++    from nacl.signing import SigningKey, VerifyKey
++    CRYPTO_BACKEND = "pynacl"
++except ImportError:
++    from cryptography.hazmat.primitives.asymmetric.ed25519 import (
++        Ed25519PrivateKey,
++        Ed25519PublicKey
++    )
++    CRYPTO_BACKEND = "cryptography"
++
++def sign_identity_creator(identity: LCTIdentity, signing_func):
++    # Use faster backend when available
++    content = identity.signable_content_creator()
++    if CRYPTO_BACKEND == "pynacl":
++        return sign_with_pynacl(content, signing_func)
++    else:
++        return sign_with_cryptography(content, signing_func)
+diff --git a/paperweb/Navigation.js b/paperweb/Navigation.js
+new file mode 100644
+index 00000000..74c2d433
+--- /dev/null
++++ b/paperweb/Navigation.js
+@@ -0,0 +1,234 @@
++// Web4 Whitepaper Navigation
++document.addEventListener('DOMContentLoaded', function() {
++    // Get all navigation links and sections
++    const navLinks = document.querySelectorAll('.nav-link');
++    const sections = document.querySelectorAll('.section');
++    
++    // Handle expandable navigation
++    const expandableToggles = document.querySelectorAll('.expandable-toggle');
++    expandableToggles.forEach(toggle => {
++        toggle.addEventListener('click', function(e) {
++            // Check if we clicked on the main link, not a sub-link
++            if (!e.target.closest('.sub-nav')) {
++                const expandable = this.closest('.expandable');
++                const subNav = expandable.querySelector('.sub-nav');
++                
++                // Toggle expanded state
++                expandable.classList.toggle('expanded');
++                if (expandable.classList.contains('expanded')) {
++                    subNav.style.display = 'block';
++                } else {
++                    subNav.style.display = 'none';
++                }
++                
++                // Still navigate to the section
++                const sectionId = this.getAttribute('data-section');
++                if (sectionId) {
++                    showSection(sectionId);
++                }
++            }
++        });
++    });
++    
++    // Handle sub-navigation clicks
++    const subNavLinks = document.querySelectorAll('.sub-nav-link');
++    subNavLinks.forEach(link => {
++        link.addEventListener('click', function(e) {
++            e.preventDefault();
++            e.stopPropagation();
++            
++            const sectionId = this.getAttribute('data-section');
++            const targetId = this.getAttribute('data-target');
++            
++            // Show the section first
++            showSection(sectionId);
++            
++            // Then scroll to the specific subsection after a brief delay
++            setTimeout(() => {
++                const targetElement = document.getElementById(targetId);
++                if (targetElement) {
++                    targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
++                } else {
++                    // If no element with that ID, try to find a header containing the text
++                    const headers = document.querySelectorAll('h2, h3');
++                    headers.forEach(h => {
++                        if (h.id === targetId || h.textContent.toLowerCase().includes(targetId.replace('-', ' '))) {
++                            h.scrollIntoView({ behavior: 'smooth', block: 'start' });
++                        }
++                    });
++                }
++            }, 200);
++            
++            // Update active states
++            document.querySelectorAll('.sub-nav-link').forEach(l => l.classList.remove('active'));
++            this.classList.add('active');
++        });
++    });
++    
++    // Function to show a specific section
++    function showSection(sectionId) {
++        // Hide all sections
++        sections.forEach(section => {
++            section.classList.remove('active');
++        });
++        
++        // Remove active class from all nav links
++        navLinks.forEach(link => {
++            link.classList.remove('active');
++        });
++        
++        // Show the selected section
++        const targetSection = document.getElementById(sectionId);
++        if (targetSection) {
++            targetSection.classList.add('active');
++            
++            // Mark the corresponding nav link as active
++            const targetLink = document.querySelector(`[data-section="${sectionId}"]`);
++            if (targetLink) {
++                targetLink.classList.add('active');
++            }
++            
++            // Update URL hash
++            window.location.hash = sectionId;
++            
++            // Scroll to top of content
++            window.scrollTo(0, 0);
++        }
++    }
++    
++    // Add click handlers to navigation links
++    navLinks.forEach(link => {
++        link.addEventListener('click', function(e) {
++            e.preventDefault();
++            const sectionId = this.getAttribute('data-section');
++            showSection(sectionId);
++        });
++    });
++    
++    // Handle direct URL access with hash
++    function handleHashChange() {
++        const hash = window.location.hash.slice(1);
++        
++        // Check if hash corresponds to a section ID
++        const validSectionIds = Array.from(navLinks).map(link => link.getAttribute('data-section'));
++        
++        if (hash && validSectionIds.includes(hash)) {
++            // This is a section navigation
++            showSection(hash);
++        } else if (hash && document.getElementById(hash)) {
++            // This is a header within a section - just scroll to it
++            const targetHeader = document.getElementById(hash);
++            const parentSection = targetHeader.closest('.section');
++            
++            if (parentSection && !parentSection.classList.contains('active')) {
++                // First show the section containing this header
++                const sectionId = parentSection.id;
++                showSection(sectionId);
++                
++                // Then scroll to the header after a brief delay
++                setTimeout(() => {
++                    targetHeader.scrollIntoView({ behavior: 'smooth' });
++                }, 100);
++            } else {
++                // Section is already active, just scroll
++                targetHeader.scrollIntoView({ behavior: 'smooth' });
++            }
++        } else if (!hash) {
++            // Show first section by default
++            showSection('executive-summary');
++        }
++    }
++    
++    // Handle browser back/forward buttons
++    window.addEventListener('hashchange', handleHashChange);
++    
++    // Initialize on page load
++    handleHashChange();
++    
++    // Add search functionality
++    const searchBox = document.getElementById('search-box');
++    if (searchBox) {
++        searchBox.addEventListener('input', function(e) {
++            const query = e.target.value.toLowerCase();
++            
++            sections.forEach(section => {
++                const content = section.textContent.toLowerCase();
++                const matches = content.includes(query);
++                
++                // Highlight matching sections in navigation
++                const sectionId = section.id;
++                const navLink = document.querySelector(`[data-section="${sectionId}"]`);
++                
++                if (navLink) {
++                    if (query && matches) {
++                        navLink.style.background = '#fef3c7';
++                    } else {
++                        navLink.style.background = '';
++                    }
++                }
++            });
++        });
++    }
++    
++    // Add table of contents generation for each section
++    sections.forEach(section => {
++        const headers = section.querySelectorAll('h2, h3');
++        if (headers.length > 2) {
++            const toc = document.createElement('div');
++            toc.className = 'section-toc';
++            toc.innerHTML = '<h4>In this section:</h4><ul></ul>';
++            
++            headers.forEach((header, index) => {
++                // Generate ID if header doesn't have one
++                if (!header.id) {
++                    header.id = header.textContent
++                        .toLowerCase()
++                        .replace(/[^\w\s-]/g, '') // Remove special characters
++                        .replace(/\s+/g, '-')     // Replace spaces with dashes
++                        .replace(/--+/g, '-')     // Replace multiple dashes with single
++                        .trim();
++                    
++                    // Ensure unique IDs by adding section prefix
++                    header.id = section.id + '-' + header.id;
++                }
++                
++                const li = document.createElement('li');
++                const a = document.createElement('a');
++                a.href = '#' + header.id;
++                a.textContent = header.textContent;
++                a.className = 'toc-link'; // Add class to distinguish from nav links
++                li.appendChild(a);
++                toc.querySelector('ul').appendChild(li);
++            });
++            
++            // Insert TOC after first h2
++            const firstH2 = section.querySelector('h2');
++            if (firstH2) {
++                firstH2.parentNode.insertBefore(toc, firstH2.nextSibling);
++            }
++        }
++    });
++});
++
++// Add copy code button to code blocks
++document.addEventListener('DOMContentLoaded', function() {
++    const codeBlocks = document.querySelectorAll('pre code');
++    
++    codeBlocks.forEach(block => {
++        const button = document.createElement('button');
++        button.className = 'copy-code-btn';
++        button.textContent = 'Copy';
++        
++        button.addEventListener('click', function() {
++            navigator.clipboard.writeText(block.textContent).then(() => {
++                button.textContent = 'Copied!';
++                setTimeout(() => {
++                    button.textContent = 'Copy';
++                }, 2000);
++            });
++        });
++        
++        block.parentNode.style.position = 'relative';
++        block.parentNode.appendChild(button);
++    });
++});
